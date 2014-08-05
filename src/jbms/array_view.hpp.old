@@ -1,0 +1,194 @@
+#ifndef HEADER_GUARD_a51a7157f86a31d744e2508bdac9271d
+#define HEADER_GUARD_a51a7157f86a31d744e2508bdac9271d
+
+#include <boost/range/iterator_range.hpp>
+#include "jbms/is_contiguous.hpp"
+#include <array>
+#include <string>
+#include <vector>
+#include <type_traits>
+
+namespace jbms {
+
+template <class T>
+class array_view;
+
+template <class T>
+struct is_contiguous_range<array_view<T>> : std::true_type {};
+
+namespace array_view_detail {
+
+template <class T>
+struct Base_type { using type = boost::iterator_range<T *>; };
+
+// We back array_view<void> by iterator_range<uint8_t *>
+template <>
+struct Base_type<void> { using type = boost::iterator_range<uint8_t *>; };
+
+// We back array_view<const void> by iterator_range<uint8_t const *>
+template <>
+struct Base_type<const void> { using type = boost::iterator_range<const uint8_t *>; };
+
+template <class T, class U>
+struct is_constructible {
+  constexpr static bool value = ((std::is_same<T, U>::value || std::is_same<T, const U>::value) ||
+                                 (std::is_same<T,void>::value && !std::is_const<U>::value) ||
+                                 std::is_same<T,const void>::value);
+};
+
+template <class T>
+inline T *advance_pointer(T *x, std::ptrdiff_t n) {
+  return x + n;
+}
+
+inline uint8_t *advance_pointer(void *x, std::ptrdiff_t n) {
+  return (uint8_t *)x + n;
+}
+
+inline const uint8_t *advance_pointer(const void *x, std::ptrdiff_t n) {
+  return (const uint8_t *)x + n;
+}
+
+}
+
+template <class T>
+class array_view : public array_view_detail::Base_type<T>::type {
+  using Base = typename array_view_detail::Base_type<T>::type;
+public:
+  using value_type = typename Base::value_type;
+
+  array_view() : Base((value_type *)nullptr, (value_type *)nullptr) {}
+
+  // array_view<const void> can be constructed from any array_view<T>
+  // array_view<void> can be constructed from any array_view<T> with non-const T
+  template <class U, bool EnableCondition = array_view_detail::is_constructible<T,U>::value,
+            typename std::enable_if<EnableCondition>::type * = nullptr>
+  array_view(array_view<U> const &other)
+    : Base((value_type *)other.begin(), (value_type *)other.end()) {}
+
+  template <class U, bool EnableCondition = array_view_detail::is_constructible<T,U>::value,
+            typename std::enable_if<EnableCondition>::type * = nullptr>
+  array_view(U *first, std::ptrdiff_t size)
+    : Base((value_type *)first, array_view_detail::advance_pointer(first, size))
+  {}
+
+  array_view(T *begin, T *end)
+    : Base((value_type *)begin, (value_type *)end)
+  {}
+
+  template <class Other,
+            bool EnableCondition = (is_contiguous_range<Other>::value &&array_view_detail::is_constructible<
+                T,
+                typename std::remove_reference<
+                    typename boost::range_reference<typename std::remove_reference<Other>::type>::type>::type>::value),
+            typename std::enable_if<EnableCondition>::type * = nullptr>
+  array_view(Other &&other)
+    : Base((value_type *)boost::begin(other), (value_type *)boost::end(other))
+  {}
+
+  template <class U,
+            bool EnableCondition = array_view_detail::is_constructible<T, U>::value,
+            typename std::enable_if<EnableCondition>::type * = nullptr>
+  array_view(boost::iterator_range<U *> const &base)
+      : Base((value_type *)base.begin(), (value_type *)base.end()) {}
+
+  template <class U, std::size_t N, bool EnableCondition = array_view_detail::is_constructible<T,U>::value,
+            typename std::enable_if<EnableCondition>::type * = nullptr>
+  array_view(U (&array) [N])
+  : Base((value_type *)&array[0], (value_type *)(&array[0] + N))
+  {}
+
+  template <class U, std::size_t N, bool EnableCondition = array_view_detail::is_constructible<T,U>::value,
+            typename std::enable_if<EnableCondition>::type * = nullptr>
+  array_view(std::array<U,N> &array)
+    : Base((value_type *)array.data(), (value_type *)(array.data() + array.size()))
+  {}
+
+  template <class U, std::size_t N, bool EnableCondition = array_view_detail::is_constructible<T,const U>::value,
+            typename std::enable_if<EnableCondition>::type * = nullptr>
+  array_view(std::array<U,N> const &array)
+    : Base((value_type *)array.data(), (value_type *)(array.data() + array.size()))
+  {}
+
+  template <class U, class Alloc, bool EnableCondition = array_view_detail::is_constructible<T,U>::value,
+            typename std::enable_if<EnableCondition>::type * = nullptr>
+  array_view(std::vector<U,Alloc> &vec)
+    : Base((value_type *)vec.data(), (value_type *)(vec.data() + vec.size()))
+  {}
+
+  template <class U,
+            class Alloc,
+            bool EnableCondition = array_view_detail::is_constructible<T, const U>::value,
+            typename std::enable_if<EnableCondition>::type * = nullptr>
+  array_view(std::vector<U, Alloc> const &vec)
+    : Base((value_type *)vec.data(), (value_type *)(vec.data() + vec.size())) {}
+
+  template <class U, class Traits, class Alloc,
+            bool EnableCondition = array_view_detail::is_constructible<T, U>::value,
+            typename std::enable_if<EnableCondition>::type * = nullptr>
+  array_view(std::basic_string<U,Traits,Alloc> &s)
+    : Base((value_type *)&s[0], (value_type *)(&s[0] + s.size()))
+  {}
+
+  template <class U, class Traits, class Alloc,
+            bool EnableCondition = array_view_detail::is_constructible<T, const U>::value,
+            typename std::enable_if<EnableCondition>::type * = nullptr>
+  array_view(std::basic_string<U,Traits,Alloc> const &s)
+    : Base((value_type *)&s[0], (value_type *)(&s[0] + s.size()))
+  {}
+
+  T *data() const { return this->begin(); }
+
+  array_view &advance_begin(std::ptrdiff_t n) {
+    this->Base::advance_begin(n);
+    return *this;
+  }
+  array_view &advance_end(std::ptrdiff_t n) {
+    this->Base::advance_end(n);
+    return *this;
+  }
+};
+
+template <class T>
+array_view<T> make_view(T *data, std::ptrdiff_t n) {
+  return { data, n };
+}
+
+template <class T, size_t N>
+array_view<T> make_view(std::array<T,N> &array) {
+  return { array };
+}
+
+template <class T, size_t N>
+array_view<T const> make_view(std::array<T,N> const &array) {
+  return { array };
+}
+
+template <class T, class Alloc>
+array_view<T> make_view(std::vector<T,Alloc> &vec) {
+  return { vec };
+}
+
+template <class T, class Alloc>
+array_view<T const> make_view(std::vector<T,Alloc> const &vec) {
+  return { vec };
+}
+
+template <class T, size_t N>
+array_view<T> make_view(T (&array) [N]) {
+  return { array };
+}
+
+template <class T, class Traits, class Alloc>
+inline array_view<T> make_view(std::basic_string<T,Traits,Alloc> &s) {
+  return { s };
+}
+
+template <class T, class Traits, class Alloc>
+inline array_view<const T> make_view(std::basic_string<T,Traits,Alloc> const &s) {
+  return { s };
+}
+
+}
+
+#endif /* HEADER GUARD */

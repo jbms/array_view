@@ -1,0 +1,5 @@
+@PACKAGE_INIT@
+
+set_and_check(jbms-array_view_INCLUDE_DIRS
+  "@PACKAGE_jbms-array_view_INCLUDE_DIR@"
+  )
