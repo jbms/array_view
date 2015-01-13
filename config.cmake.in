@@ -1,5 +1,19 @@
 @PACKAGE_INIT@
 
+find_package(jbms-utility REQUIRED)
+
 set_and_check(jbms-array_view_INCLUDE_DIRS
   "@PACKAGE_jbms-array_view_INCLUDE_DIR@"
+  ${jbms-utility_INCLUDE_DIRS}
+  )
+
+set_and_check(jbms-array_view_DOXYGEN_TAGFILE
+  "@PACKAGE_jbms-array_view_DOXYGEN_TAGFILE@"
+  )
+set_and_check(jbms-array_view_HTML_DIR
+  "@PACKAGE_jbms-array_view_HTML_DIR@"
+  )
+
+set(jbms-array_view_DOXYGEN_TAGFILES
+  "@PACKAGE_jbms-array_view_DOXYGEN_TAGFILE@=@PACKAGE_jbms-array_view_HTML_DIR@"
   )

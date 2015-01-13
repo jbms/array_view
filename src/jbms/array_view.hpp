@@ -6,7 +6,10 @@
 #include <array>
 #include <string>
 #include <vector>
+#include <cstring>
 #include <type_traits>
+#include "jbms/print_fwd.hpp"
+#include "jbms/enable_if.hpp"
 
 namespace jbms {
 
@@ -29,12 +32,29 @@ struct base_type<void> { using type = uint8_t; };
 template <>
 struct base_type<const void> { using type = const uint8_t; };
 
+// Determines if T[] should be constructible from U[]
+// If U is const, then T must be const
+// remove_const_t<T> == remove_const_t<U> or remove_const_t<T> == void
 template <class T, class U>
 struct is_constructible {
   constexpr static bool value = ((std::is_same<T, U>::value || std::is_same<T, const U>::value) ||
                                  (std::is_same<T,void>::value && !std::is_const<U>::value) ||
                                  std::is_same<T,const void>::value);
 };
+
+// Determines if array_view<T> should be constructible from Other
+// This is equivalent to is_contiguous_range<Other> and is_constructible<T>
+template <class T,
+          class Other,
+          bool is_contiguous_range_v = is_contiguous_range<std::remove_const_t<std::remove_reference_t<Other>>>::value>
+struct is_constructible_from_range : std::false_type {};
+
+template <class T, class Other>
+struct is_constructible_from_range<T, Other, true> : array_view_detail::is_constructible<
+                                                         T,
+                                                         std::remove_reference_t<typename boost::range_reference<
+                                                             std::remove_reference_t<Other>>::type>> {};
+
 
 template <class T>
 inline T *advance_pointer(T *x, std::ptrdiff_t n) {
@@ -69,13 +89,11 @@ public:
 
   // array_view<const void> can be constructed from any array_view<T>
   // array_view<void> can be constructed from any array_view<T> with non-const T
-  template <class U, bool EnableCondition = array_view_detail::is_constructible<T,U>::value,
-            std::enable_if_t<EnableCondition> * = nullptr>
+  template <class U, JBMS_ENABLE_IF(array_view_detail::is_constructible<T,U>)>
   constexpr array_view(array_view<U> const &other)
     : begin_((value_type *)other.begin()), end_((value_type *)other.end()) {}
 
-  template <class U, bool EnableCondition = array_view_detail::is_constructible<T,U>::value,
-            std::enable_if_t<EnableCondition> * = nullptr>
+  template <class U, JBMS_ENABLE_IF(array_view_detail::is_constructible<T,U>)>
   constexpr array_view(U *first, std::ptrdiff_t size)
     : begin_((value_type *)first), end_(array_view_detail::advance_pointer(first, size))
   {}
@@ -84,16 +102,14 @@ public:
     : begin_((value_type *)begin_), end_((value_type *)end_)
   {}
 
-  template <
-      class Other,
-      bool EnableCondition =
-          (is_contiguous_range<std::remove_const_t<std::remove_reference_t<Other>>>::value &&
-           array_view_detail::is_constructible<
-              T,
-              std::remove_reference_t<typename boost::range_reference<std::remove_reference_t<Other>>::type>>::value),
-      std::enable_if_t<EnableCondition> * = nullptr>
+  array_view(array_view const &) = default;
+  array_view(array_view &&other) = default;
+  array_view &operator=(array_view const &) = default;
+  array_view &operator=(array_view &&) = default;
+
+  template <class Other, JBMS_ENABLE_IF(array_view_detail::is_constructible_from_range<T, Other>)>
   array_view(Other &&other)
-    : begin_((value_type *)&*boost::begin(other)), end_((value_type *)&*boost::end(other)) {}
+      : begin_((value_type *)&*boost::begin(other)), end_((value_type *)&*boost::end(other)) {}
 
   constexpr pointer begin() const { return begin_; }
   constexpr pointer end() const { return end_; }
@@ -176,55 +192,49 @@ private:
   pointer begin_, end_;
 };
 
+template <class T>
+JBMS_RANGE_PRINTER_SPECIALIZATION(array_view<T>);
+
 template <class CharT, class Traits, class T>
 std::ostream &operator<<(std::basic_ostream<CharT,Traits> &os,
                          array_view<T> const &x) {
-  os << "{";
-  bool is_first = true;
-  for (auto &&v : x) {
-    if (!is_first)
-      os << ", ";
-    is_first = false;
-    os << v;
-  }
-  os << "}";
-  return os;
+  return print(os, x);
 }
 
 template <class T, class U,
-          std::enable_if_t<std::is_convertible<array_view<T>,array_view<const U>>::value ||
-                           std::is_convertible<array_view<U>,array_view<const T>>::value> * = nullptr>
+          JBMS_ENABLE_IF_C(std::is_convertible<array_view<T>,array_view<const U>>::value ||
+                           std::is_convertible<array_view<U>,array_view<const T>>::value)>
 constexpr bool operator==(array_view<T> const &a, array_view<U> const &b) {
   return a.begin() == b.begin() && a.end() == b.end();
 }
 
 template <class T, class U,
-          std::enable_if_t<std::is_convertible<array_view<T>,array_view<const U>>::value ||
-                           std::is_convertible<array_view<U>,array_view<const T>>::value> * = nullptr>
+          JBMS_ENABLE_IF_C(std::is_convertible<array_view<T>,array_view<const U>>::value ||
+                           std::is_convertible<array_view<U>,array_view<const T>>::value)>
 constexpr bool operator!=(array_view<T> const &a, array_view<U> const &b) {
   return !(a == b);
 }
 
 template <class T, class Other,
-          std::enable_if_t<std::is_convertible<Other,array_view<const T>>::value> * = nullptr>
+          JBMS_ENABLE_IF(std::is_convertible<Other,array_view<const T>>)>
 constexpr bool operator==(array_view<T> const &a, Other const &b) {
   return a.begin() == &*boost::begin(b) && a.end() == &*boost::end(b);
 }
 
 template <class T, class Other,
-          std::enable_if_t<std::is_convertible<Other,array_view<const T>>::value> * = nullptr>
+          JBMS_ENABLE_IF(std::is_convertible<Other,array_view<const T>>)>
 constexpr bool operator==(Other const &b, array_view<T> const &a) {
   return a.begin() == &*boost::begin(b) && a.end() == &*boost::end(b);
 }
 
 template <class T, class Other,
-          std::enable_if_t<std::is_convertible<Other,array_view<const T>>::value> * = nullptr>
+          JBMS_ENABLE_IF(std::is_convertible<Other,array_view<const T>>)>
 constexpr bool operator!=(array_view<T> const &a, Other const &b) {
   return !(a == b);
 }
 
 template <class T, class Other,
-          std::enable_if_t<std::is_convertible<Other,array_view<const T>>::value> * = nullptr>
+          JBMS_ENABLE_IF(std::is_convertible<Other,array_view<const T>>)>
 constexpr bool operator!=(Other const &b, array_view<T> const &a) {
   return !(a == b);
 }
@@ -235,17 +245,40 @@ array_view<T> make_view(T *data, std::ptrdiff_t n) {
 }
 
 template <class T>
+array_view<T> make_array_view(T *data, std::ptrdiff_t n) {
+  return { data, n };
+}
+
+template <class T>
 array_view<T> make_view(T *begin, T *end) {
   return { begin, end };
 }
 
+template <class T>
+array_view<T> make_array_view(T *begin, T *end) {
+  return { begin, end };
+}
+
 template <class Other,
-          bool EnableCondition = is_contiguous_range<std::remove_const_t<std::remove_reference_t<Other>>>::value,
-          std::enable_if_t<EnableCondition> * = nullptr>
+          JBMS_ENABLE_IF(is_contiguous_range<std::remove_const_t<std::remove_reference_t<Other>>>)>
 array_view<std::remove_reference_t<typename boost::range_reference<std::remove_reference_t<Other>>::type>>
 make_view(Other &&other) {
   return { other };
 }
+
+template <class Other,
+          JBMS_ENABLE_IF(is_contiguous_range<std::remove_const_t<std::remove_reference_t<Other>>>)>
+array_view<std::remove_reference_t<typename boost::range_reference<std::remove_reference_t<Other>>::type>>
+make_array_view(Other &&other) {
+  return { other };
+}
+
+
+inline array_view<const char> make_cstr_array_view(const char *s) {
+  return make_array_view(s, s + std::strlen(s));
+}
+
+
 }
 
 #endif /* HEADER GUARD */
