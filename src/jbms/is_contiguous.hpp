@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <initializer_list>
 
 namespace jbms {
 
@@ -26,6 +27,9 @@ struct is_contiguous_range<T[N]> : std::true_type {};
 
 template <class T>
 struct is_contiguous_range<boost::iterator_range<T *>> : std::true_type {};
+
+template <class T>
+struct is_contiguous_range<std::initializer_list<T>> : std::true_type {};
 
 }
 
