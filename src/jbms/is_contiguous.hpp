@@ -4,6 +4,7 @@
 #include <type_traits>
 #include <boost/range/iterator_range.hpp>
 #include <string>
+#include "jbms/string_view.hpp"
 #include <vector>
 #include <array>
 #include <initializer_list>
@@ -18,6 +19,9 @@ struct is_contiguous_range<std::vector<T,Allocator>> : std::true_type {};
 
 template <class T, class CharTraits, class Allocator>
 struct is_contiguous_range<std::basic_string<T,CharTraits,Allocator>> : std::true_type {};
+
+template <class T, class CharTraits>
+struct is_contiguous_range<jbms::basic_string_view<T,CharTraits>> : std::true_type {};
 
 template <class T, size_t N>
 struct is_contiguous_range<std::array<T,N>> : std::true_type {};

@@ -3,9 +3,6 @@
 
 #include <boost/range/reference.hpp>
 #include "jbms/is_contiguous.hpp"
-#include <array>
-#include <string>
-#include <vector>
 #include <cstring>
 #include <type_traits>
 #include "jbms/print_fwd.hpp"
