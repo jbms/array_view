@@ -167,7 +167,7 @@ public:
   }
 
 private:
-  constexpr pointer bounded_ptr_(ptrdiff_t pos) {
+  constexpr pointer bounded_ptr_(ptrdiff_t pos) const {
     return begin() + std::min(ptrdiff_t(size()), std::max(pos, ptrdiff_t(0)));
   }
 public:
